@@ -1,0 +1,229 @@
+---
+title: "NDVI en Git de Madre de Dios 2013-2014"
+author: "Gorky Florez Castillo"
+date: "8/8/2021"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: cerulean
+---
+```{r setup, include=FALSE}
+# Instalar librerias ------------------------------------------------------------
+# install.packages("googledrive")
+# install.packages("rgee")
+library(googledrive)
+library(rgee)
+library(mapedit)
+library(tibble)
+library(sf)
+library(cptcity)
+library(tidyverse)
+library(sp)
+library(leaflet.extras2)
+library(magick)
+# remotes::install_github("r-earthengine/rgeeExtra")
+library(rgeeExtra)
+library(raster)
+# Instalar rtools---------------------------------------------------------
+# rtools
+# Sys.which("make")
+# Paquete de rgee
+#ee_install()
+
+# Nos pedira si queremos instalar miniconda dareos Y
+# Creara un nuevo entorn Python
+# Nos pedira reiniciar la consola daremos 1
+# Instalar rtools---------------------------------------------------------
+# Iniciamos nuestra cuenta de Rgee
+ee_Initialize("gflorezc", drive = T)
+# ee_install()
+# point <- mapedit::drawFeatures()                        # Buscamos nuestro punto de referencia
+# point <- st_geometry(point) %>% sf_as_ee()              # Convirtemos el objeto a shp en ee
+
+# Defina los límites regionales de los fotogramas de animación y una máscara para recortar los datos NDVI.
+Peru    <- getData('GADM', country='Peru', level=1) %>%st_as_sf()  
+MDD     <- subset(Peru, NAME_1  == "Madre de Dios")
+write_sf(MDD,"SHP/MDD.shp")
+mask <- st_read("SHP/MDD.shp")%>%  sf_as_ee()        #Subimos nuestro capa de shp de 
+
+
+region <- mask$geometry()$bounds()
+
+# Recupere el conjunto de datos MODIS Terra Vegetation Indices 16-Day Global 1km como ee.ImageCollectiony seleccione la banda NDVI.
+
+col    <- ee$ImageCollection('MODIS/006/MOD13A2')$select('NDVI')
+
+# Agrupar imágenes por fecha compuesta
+
+col         <- col$map(function(img) {
+  doy         <- ee$Date(img$get('system:time_start'))$getRelative('day', 'year')
+  img$set('doy', doy)})
+
+distinctDOY <- col$filterDate('2013-01-01', '2014-01-01')
+
+# Defina un filtro que identifique qué imágenes de la colección completa coinciden con el DOY de la colección DOY distinta.
+
+filter <- ee$Filter$equals(leftField = 'doy', rightField = 'doy')
+
+# Defina una combinación; convierta el FeatureCollection resultante en un ImageCollection.
+
+join <- ee$Join$saveAll('doy_matches')
+joinCol <- ee$ImageCollection(join$apply(distinctDOY, col, filter))
+
+# Aplicar la reducción media entre las colecciones DOY coincidentes.
+comp <- joinCol$map(function(img) {
+  doyCol = ee$ImageCollection$fromImages(
+    img$get('doy_matches')
+  )
+  doyCol$reduce(ee$Reducer$median())
+})
+# Defina los parámetros de visualización RGB.
+
+visParams = list(
+  min = 0.0,
+  max = 9000.0,
+  bands = "NDVI_median",
+  palette = c(
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+  )
+)
+# Cree imágenes de visualización RGB para usarlas como cuadros de animación.
+
+rgbVis <- comp$map(function(img) {
+  do.call(img$visualize, visParams) %>% 
+    ee$Image$clip(mask)
+})
+
+# Defina los parámetros de visualización GIF.
+
+gifParams <- list(
+  region = region,
+  dimensions = 600,
+  crs = 'EPSG:3857',
+  framesPerSecond = 10
+)
+
+# Use las funciones ee_utils_gif_ * para renderizar la animación GIF y agregar algunos textos.
+animation <- rgee::ee_utils_gif_creator(rgbVis, gifParams, mode = "wb")
+
+# Arequipa---------------------------------------------------------
+Peru    <- getData('GADM', country='Peru', level=1) %>%st_as_sf()  
+arequipa<- subset(Peru, NAME_1  == "Arequipa")
+write_sf(arequipa,"SHP/arequipa.shp")
+mask1 <- st_read("SHP/arequipa.shp")%>%  sf_as_ee()        #Subimos nuestro capa de shp de 
+
+
+region1 <- mask1$geometry()$bounds()
+
+# Recupere el conjunto de datos MODIS Terra Vegetation Indices 16-Day Global 1km como ee.ImageCollectiony seleccione la banda NDVI.
+
+col1    <- ee$ImageCollection('MODIS/006/MOD13A2')$select('NDVI')
+
+# Agrupar imágenes por fecha compuesta
+
+col1         <- col1$map(function(img) {
+   doy         <- ee$Date(img$get('system:time_start'))$getRelative('day', 'year')
+               img$set('doy', doy)})
+
+distinctDOY <- col1$filterDate('2013-01-01', '2014-01-01')
+
+# Defina un filtro que identifique qué imágenes de la colección completa coinciden con el DOY de la colección DOY distinta.
+
+filter <- ee$Filter$equals(leftField = 'doy', rightField = 'doy')
+
+# Defina una combinación; convierta el FeatureCollection resultante en un ImageCollection.
+
+join1 <- ee$Join$saveAll('doy_matches')
+joinCol1 <- ee$ImageCollection(join1$apply(distinctDOY, col, filter))
+
+# Aplicar la reducción media entre las colecciones DOY coincidentes.
+comp1 <- joinCol1$map(function(img) {
+  doyCol = ee$ImageCollection$fromImages(
+    img$get('doy_matches')
+  )
+  doyCol$reduce(ee$Reducer$median())
+})
+# Defina los parámetros de visualización RGB.
+
+visParams1 = list(
+  min = 0.0,
+  max = 9000.0,
+  bands = "NDVI_median",
+  palette = c(
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+  )
+)
+# Cree imágenes de visualización RGB para usarlas como cuadros de animación.
+
+rgbVis1 <- comp$map(function(img) {
+  do.call(img$visualize, visParams1) %>% 
+    ee$Image$clip(mask1)
+})
+
+# Defina los parámetros de visualización GIF.
+
+gifParams1 <- list(
+  region = region1,
+  dimensions = 600,
+  crs = 'EPSG:3857',
+  framesPerSecond = 10
+)
+
+# Use las funciones ee_utils_gif_ * para renderizar la animación GIF y agregar algunos textos.
+animation1 <- rgee::ee_utils_gif_creator(rgbVis1, gifParams1, mode = "wb")
+```
+Google Earth Engine en RStudio NDVI MADRE DE DIOS
+===================================== 
+
+Column {data-width=550}
+-----------------------------------------------------------------------
+
+### Mapa NDVI en Git de Madre de Dios 2013-2014
+```{r map}
+animation %>% 
+  rgee::ee_utils_gif_annotate(
+    text = "NDVI: MODIS/006/MOD13A2",
+    size = 15, color = "white",
+    location = "+10+10"
+  ) %>% 
+  rgee::ee_utils_gif_annotate(
+    text = "Creacion de  NDVI-animation", 
+    size = 15, 
+    location = "+35+35",
+    color = "white", 
+    font = "arial",
+    boxcolor = "#000000"
+  )
+```
+
+Google Earth Engine en RStudio NDVI AREQUIPA
+===================================== 
+
+Column {data-width=550}
+-----------------------------------------------------------------------
+
+### Mapa NDVI en Git de Arequipa 2013-2014
+
+```{r map1}
+animation1 %>% 
+  rgee::ee_utils_gif_annotate(
+    text = "NDVI: MODIS/006/MOD13A2",
+    size = 15, color = "white",
+    location = "+10+10"
+  ) %>% 
+  rgee::ee_utils_gif_annotate(
+    text = "Creacion de  NDVI-animation", 
+    size = 12, 
+    location = "+35+35",
+    color = "white", 
+    font = "arial",
+    boxcolor = "#000000"
+  ) # -> animation_wtxt
+
+# ee_utils_gif_save(animation_wtxt, path = "raster_as_ee.gif")
+```
+
+
